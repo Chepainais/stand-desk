@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <ESP32Encoder.h>
+#include <ezButton.h>
 
 // DISPLAY
 #include <Adafruit_SSD1306.h>
@@ -8,6 +9,9 @@
 // MOTORS
 #include "Motor.h"
 #include "MotorControl.h"
+// BUTTON CONFIG
+#define DEBOUNCE_TIME 50
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
   // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
@@ -24,12 +28,14 @@ MotorControl mc;
 #define PWM_MIN 30;
 #define PWM_MAX 100;
 #define MOTOR_SOFT_START_RATION 10;
+
 // EEPROM
 int EEPROM_SIZE = 12;
 int EEPROMEnc1Pos = 0;
 int EEPROMEnc2Pos = 0;
 
 // GPIOs
+// 21 - SDA, 22 - SCL reserved for screen!!
 int enc1GPIOG = 18;
 int enc1GPIOB = 19;
 int enc2GPIOG = 16;
@@ -38,23 +44,30 @@ int dcPwm1GPIO = 25;
 int dcDir1GPIO = 14;
 int dcPwm2GPIO = 26;
 int dcDir2GPIO = 12;
-int btnUpGPIO = 34;
-int btnDownGPIO = 35;
+int btnUpGPIO = 25;
+int btnDownGPIO = 23;
 
+
+ezButton buttonUp(btnUpGPIO);
+ezButton buttonDown(btnDownGPIO);
 // APP variables, constants
 bool RESET = false;
 int lastEnc1Pos = 0;
 int lastEnc2Pos = 0;
 int currentPosition = 0;
 int currentPositiontarget = 1;
-
+// DEBUG CONFIG
+int serialOutMax = 10000000;
+int serialOut = 0;
 void setup() {
   Serial.begin(115200);
   Serial.println("Start set up");
       // INIT input buttons
         // UP | primary
-        pinMode(btnUpGPIO, INPUT);
-        pinMode(btnDownGPIO, INPUT);
+        // pinMode(btnUpGPIO, INPUT_PULLUP);
+        // pinMode(btnDownGPIO, INPUT_PULLUP);
+        buttonUp.setDebounceTime(DEBOUNCE_TIME);
+        buttonDown.setDebounceTime(DEBOUNCE_TIME);
         // DOWN | primary
         // SAVE position | optional
         // GOTO position | optional
@@ -109,6 +122,8 @@ void setup() {
 }
 
 void loop() {
+  buttonUp.loop();
+  buttonDown.loop();
     // check encoder values, store at EEPROM if changed
     int enc1Position = encoder.getCount();
     // int enc2Position = encoder2.getCount();
@@ -116,37 +131,50 @@ void loop() {
     currentPosition = enc1Position;
 
     // Check up/down buttons
-    int btnUpState = digitalRead(btnUpGPIO);
-    Serial.print("Btn UP state: ");
-    Serial.println(btnUpState);
-    int btnDownState = digitalRead(btnDownGPIO);
-    Serial.print("Btn DOWN state: ");
-    Serial.println(btnDownState);
+    // int btnUpState = digitalRead(btnUpGPIO);
+  int btn1State = buttonUp.getState();
+  Serial.print("button 1 state: ");
+  Serial.println(btn1State);
+    if(buttonUp.isPressed()){
+        // Serial.print(btnUpState);
+        Serial.print(" Btn UP");
+        // delay(1000);
+    }
+   
+    // int btnDownState = digitalRead(btnDownGPIO);
+    if(buttonDown.isPressed()){
+      Serial.println("Btn DOWN");
+    }
     // If both buttons is pressed
     // Reset position
-    if(btnUpState && btnDownState){
-      currentPosition = 0;
-      currentPositiontarget = 0;
-       return;
+    // if(buttonUp.isPressed() && buttonDown.isPressed()){
+    //   currentPosition = 0;
+    //   currentPositiontarget = 0;
+    //    return;
+    // }
+    // if(buttonUp.isPressed()){
+    //   // @TODO move step to constant
+    //   currentPositiontarget = currentPosition + 100;
+    // }
+    // if(buttonDown.isPressed()){
+    //   currentPositiontarget = currentPosition - 100;
+    // }
+    serialOut++;
+    if(serialOut == serialOutMax){
+      Serial.print("Cur pos: ");
+      Serial.print(currentPosition);
+      Serial.print(" target: ");
+      Serial.println(currentPositiontarget);
+      // reset counter
+      serialOut = 0;
     }
-    if(btnUpState){
-      // @TODO move step to constant
-      currentPositiontarget = currentPosition + 200;
-    }
-    if(btnDownState){
-      currentPositiontarget = currentPosition - 200;
-    }
-    Serial.print("Cur pos: ");
-    Serial.print(currentPosition);
-    Serial.print(" target: ");
-    Serial.println(currentPositiontarget);
     // SAVE LAST POSITION TO EEPROM, IF DIFFERENT
     // if(enc1Position != lastEnc1Pos || enc2Position != lastEnc2Pos){
     if(enc1Position != lastEnc1Pos){
-      EEPROM.writeInt(EEPROMEnc1Pos, enc1Position);
+      // EEPROM.writeInt(EEPROMEnc1Pos, enc1Position);
       // EEPROM.writeInt(EEPROMEnc2Pos, enc2Position);
       Serial.println("EEPROM write");
-      EEPROM.commit();
+      // EEPROM.commit();
     }
     lastEnc1Pos = enc1Position;
     // lastEnc2Pos = enc2Position;
@@ -154,13 +182,20 @@ void loop() {
       // if position target not reached - try 2 reach
 
     // Dont move if small diff
-    if(abs(currentPositiontarget - currentPosition) > 30){
-        Serial.print("move to height");
-        Serial.println(currentPositiontarget);
-      mc.moveToHeight(currentPositiontarget);
+    if(abs(currentPositiontarget - currentPosition) > 5){
+        // Serial.print("move to height");
+        // Serial.println(currentPositiontarget);
+        // MOVE TO TARGET HEIGHT
+      // mc.moveToHeight(currentPositiontarget);
     }
+
+    if(serialOut == serialOutMax){
+      // reset counter
+      serialOut = 0;
+    }
+    // Serial.print(serialOut);
     // display new height
-    delay(1000);
+    // delay(1000);
     //
 
 }

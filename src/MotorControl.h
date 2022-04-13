@@ -10,5 +10,6 @@ class MotorControl {
         void addMotor(Motor motor);
         void setTargetHeight(int height);
         void moveToHeight(int height);
-
+        int debugCounter = 0;
+        int debugCounterMax = 10000;
 };
